@@ -61,6 +61,7 @@ Notes:
 | Wall-clock time | `start=$(date +%s)` before, `end=$(date +%s)` after; record `end-start` |
 | Commits created | `git rev-list --count "$START_SHA"..HEAD` |
 | Tests passing | test command result at end of run |
+| Skill activated | Run B only: verify a `tool_use` event with `part.tool == "skill"` (see B4) |
 | Files/lines changed | `git diff --stat "$START_SHA"..HEAD` |
 | Final state clean | `git status --porcelain` empty |
 
@@ -367,11 +368,12 @@ ls .opencode/skills .opencode/commands
 argus generate --check
 ```
 
-#### B2.4 Advertise the Argus skills in AGENTS.md
+#### B2.4 Advertise the Argus skills as mandatory in AGENTS.md
 
 OpenCode lists loaded skills to the model, but the agent only sees the full pack
-instructions after it invokes the `skill` tool. Put an explicit, stable pointer in
-`AGENTS.md` so the agent knows the packs exist and how to load them.
+instructions after it invokes the `skill` tool. Put an explicit, mandatory pointer
+in `AGENTS.md` so the agent is instructed to load the relevant packs before it
+plans, edits, or runs commands.
 
 Append a marked block (the marker must look like `name:subname` so `argus
 generate` preserves it):
@@ -384,9 +386,11 @@ import yaml
 packs = yaml.safe_load(Path(".argus.yml").read_text())["packs"]
 block = (
     "<!-- argus:skills:start -->\n"
-    "## Argus Skills\n\n"
+    "## Argus Skills (mandatory)\n\n"
     "This repository has Argus skill packs installed under `.opencode/skills/`.\n"
-    "Invoke the `skill` tool with the pack name before applying it. "
+    "**Before planning, editing, or running any command, you MUST invoke the\n"
+    "`skill` tool with the relevant pack name(s).** Do not rely on this summary\n"
+    "or on `AGENTS.md` alone; the tool loads the authoritative instructions.\n\n"
     "Available packs:\n\n"
     + "\n".join(f"- `{p}`" for p in packs)
     + "\n<!-- argus:skills:end -->\n"
@@ -520,13 +524,20 @@ Record the install commit and use it as `START_SHA` in B3.
 
 ### B3. Run the same prompt
 
+Run with JSON events so B4 can prove the skill pack was activated. The prompt
+and model must be identical to Run A; only the output format differs.
+
 ```bash
 START_SHA=$(git rev-parse HEAD)
 
 start=$(date +%s)
-# --- run the agent with the SAME prompt as Run A, in this directory ---
+opencode run --auto -m "$MODEL" --format json --dir "$PWD" \
+  "$(cat /tmp/compare-prompt.txt)" > /tmp/run-b-events.jsonl 2>/tmp/run-b-agent.log
 end=$(date +%s)
 ```
+
+`MODEL` is the same value used in B2.5 (e.g.
+`openrouter/deepseek/deepseek-v4.1-flash-1017`).
 
 After the agent finishes:
 
@@ -543,6 +554,46 @@ Preserve evidence:
 git bundle create /tmp/run-b.bundle --all
 git log --oneline "$START_SHA"..HEAD > /tmp/run-b-commits.txt
 ```
+
+### B4. Verify the skill pack was actually activated (required)
+
+A run only measures the skill pack if the agent actually invoked it. If no
+`skill` tool call appears, the run is invalid regardless of test results: fix
+activation (see the mandatory wording in B2.4), reset to the install commit,
+and repeat Run B.
+
+```bash
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+events = [
+    json.loads(line)
+    for line in Path("/tmp/run-b-events.jsonl").read_text().splitlines()
+    if line.strip()
+]
+calls = [
+    e for e in events
+    if e.get("type") == "tool_use" and (e.get("part") or {}).get("tool") == "skill"
+]
+if not calls:
+    raise SystemExit(
+        "FAIL: Run B never invoked the skill tool; the run did not exercise the pack"
+    )
+names = [
+    ((e.get("part") or {}).get("state") or {}).get("input", {}).get("name")
+    for e in calls
+]
+required = {"tdd", "atomic-commit"}
+missing = sorted(required - {n for n in names if n})
+if missing:
+    raise SystemExit(f"FAIL: Run B did not load required skill(s): {missing}")
+print(f"PASS: Run B invoked {len(calls)} skill(s): {names}")
+PY
+```
+
+Record the loaded pack names with the results. The check requires `tdd` and
+`atomic-commit`; loading `pre-commit` as well is expected.
 
 ---
 
@@ -573,6 +624,7 @@ template below.
 | Wall-clock time (s) | | | |
 | Agent commits | | | |
 | Tests passing (y/n) | | | |
+| Skill activated (y/n) | n/a | | |
 | Files changed | | | |
 | Lines +/- | | | |
 | Final tree clean | | | |
@@ -605,10 +657,11 @@ condition 2–3 times and report medians; isolate skill install time from agent 
 - [ ] Run Preflight again: reset to `baseline`, verify still on `main` and no skill pack
 - [ ] Install Argus (`pip install argus-standards`) with all packs/platforms
 - [ ] Verify Argus (`--version`, `validate`, `packs list`, `platforms list`, `generate --check`)
-- [ ] Ensure `AGENTS.md` advertises the Argus skills (marked `argus:skills` block)
+- [ ] Ensure `AGENTS.md` advertises the Argus skills as mandatory (marked `argus:skills` block)
 - [ ] Verify OpenCode loaded and can run every Argus skill (frontmatter, `opencode debug skill`, smoke test)
 - [ ] Commit generated skill-pack files as the Run B start point (excluded from timing/commit count)
 - [ ] Run B: time, run same prompt, count commits, save bundle/log
+- [ ] Verify Run B actually invoked the `skill` tool (B4); if not, re-run before trusting the result
 - [ ] Fill Results table
 - [ ] Write timestamped results file `compare-results-YYYYMMDD-HHMMSS.md` in the workspace root
 - [ ] Write comparison conclusion
