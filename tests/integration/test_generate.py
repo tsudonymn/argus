@@ -1,5 +1,6 @@
 import json
 
+import yaml
 from click.testing import CliRunner
 
 from argus.cli import main
@@ -121,6 +122,19 @@ def test_generate_produces_opencode_files(tmp_path):
     assert (tmp_path / "opencode.json").exists()
     assert (tmp_path / ".opencode/skills/tdd/SKILL.md").exists()
     assert (tmp_path / ".opencode/commands/tdd.md").exists()
+
+
+def test_generated_opencode_skill_has_valid_frontmatter(tmp_path):
+    (tmp_path / ".argus.yml").write_text(OPENCODE_ONLY_CONFIG)
+    runner = CliRunner()
+    result = runner.invoke(main, ["generate", "--project-root", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    content = (tmp_path / ".opencode/skills/tdd/SKILL.md").read_text()
+    assert content.startswith("---\n")
+    _, frontmatter, _ = content.split("---\n", 2)
+    data = yaml.safe_load(frontmatter)
+    assert data["name"] == "tdd"
+    assert data["description"]
 
 
 def test_generate_produces_copilot_files(tmp_path):

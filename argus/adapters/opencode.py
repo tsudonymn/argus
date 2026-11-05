@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import yaml
+
 from argus.adapters.base import GENERATED_HEADER, BaseAdapter, GeneratedFile, Pack
 from argus.merger import JsonMerger
 
@@ -32,10 +34,22 @@ class OpenCodeAdapter(BaseAdapter):
         return [
             GeneratedFile(
                 path=Path(f".opencode/skills/{pack.name}/SKILL.md"),
-                content=GENERATED_HEADER + pack.instructions,
+                content=self._skill_content(pack),
             )
             for pack in packs
         ]
+
+    @staticmethod
+    def _skill_content(pack: Pack) -> str:
+        description = pack.manifest.get("description") or (
+            f"Use when applying the {pack.name} standards"
+        )
+        frontmatter = yaml.safe_dump(
+            {"name": pack.name, "description": description},
+            sort_keys=False,
+            allow_unicode=True,
+        )
+        return f"---\n{frontmatter}---\n\n{GENERATED_HEADER}{pack.instructions}"
 
     def _commands(self, packs: list[Pack]) -> list[GeneratedFile]:
         return [

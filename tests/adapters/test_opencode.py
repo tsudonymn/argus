@@ -1,5 +1,8 @@
 import json
 from pathlib import Path
+
+import yaml
+
 from argus.adapters.opencode import OpenCodeAdapter
 from argus.adapters.base import GENERATED_HEADER
 from tests.adapters.conftest import stub_pack
@@ -33,6 +36,23 @@ def test_opencode_generates_skill_per_pack():
     paths = [f.path for f in files]
     assert Path(".opencode/skills/tdd/SKILL.md") in paths
     assert Path(".opencode/skills/solid/SKILL.md") in paths
+
+
+def test_opencode_skill_frontmatter_declares_name_and_description():
+    files = OpenCodeAdapter().generate([stub_pack("tdd")])
+    skill = next(f for f in files if f.path == Path(".opencode/skills/tdd/SKILL.md"))
+    assert skill.content.startswith("---\n")
+    _, frontmatter, _ = skill.content.split("---\n", 2)
+    data = yaml.safe_load(frontmatter)
+    assert data["name"] == "tdd"
+    assert data["description"] == "Use when applying tdd discipline"
+
+
+def test_opencode_skill_frontmatter_is_before_generated_header_and_body():
+    files = OpenCodeAdapter().generate([stub_pack("tdd")])
+    skill = next(f for f in files if f.path == Path(".opencode/skills/tdd/SKILL.md"))
+    assert skill.content.index("---\n") < skill.content.index(GENERATED_HEADER)
+    assert "TDD instructions" in skill.content
 
 
 def test_opencode_generates_command_for_pack_with_checklist():

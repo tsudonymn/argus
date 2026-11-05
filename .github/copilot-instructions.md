@@ -14,9 +14,10 @@ Every logical change is one commit. A commit represents a single, discrete, comp
 If your commit message requires the word "also", that is a second commit.
 
 ## Commit Cycle (within TDD)
-STOP → RED → GREEN → COMMIT → REFACTOR → COMMIT
+RED → GREEN → COMMIT → REFACTOR → COMMIT
 
-Each phase produces exactly one commit. Never batch phases.
+Commit after GREEN to save a known working state, then commit again after
+REFACTOR. Never batch phases.
 
 ## Commit Message Format (Conventional Commits — conventionalcommits.org)
 `type(scope): description`
@@ -31,7 +32,6 @@ Each phase produces exactly one commit. Never batch phases.
 
 **Examples:**
 ```
-test: add failing test for discount calculation
 feat: implement discount calculation
 refactor: extract discount rate to named constant
 ```
@@ -50,15 +50,18 @@ refactor: extract discount rate to named constant
 ## Core Rule
 Never write or modify production code before there exists at least one failing test for the targeted behaviour. (TDD Guard contract — see: news.lavx.hu/article/tdd-guard)
 
-## The Cycle
-STOP → RED → GREEN → COMMIT → REFACTOR → COMMIT
+## The Workflow
+RED → GREEN → Commit → REFACTOR → Commit
 
-1. **STOP** — Understand the requirement. Write nothing yet.
-2. **RED** — Write the smallest failing test that captures the requirement. Run it. Confirm it fails with the right error.
-3. **GREEN** — Write the minimum production code to make the test pass. No extra logic.
-4. **COMMIT** — `git commit -m "feat: implement <behaviour>"`
-5. **REFACTOR** — Improve code quality without changing behaviour. Run tests after each change.
-6. **COMMIT** — `git commit -m "refactor: <what you improved>"`
+The Test-Driven Development (TDD) community generally favors
+RED → GREEN → Commit → REFACTOR → Commit.
+
+1. **RED**: Write a failing test.
+2. **Green**: Write the bare minimum code to pass.
+3. **Commit 1**: Save a known working state (`feat` or `test: make X pass`).
+4. **Refactor**: Clean up duplication, improve naming, or reorganize architecture
+   without changing behavior.
+5. **Commit 2**: Save your design cleanup (`refactor: clean up X`).
 
 ## Coverage Threshold
 - Minimum 80% unit test coverage for all changed code (NIST-aligned standard)
